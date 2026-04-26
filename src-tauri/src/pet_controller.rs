@@ -1,4 +1,4 @@
-use crate::state::{working_states, Direction, Edge, PetState, SharedState, StatePayload};
+use crate::state::{working_states, Direction, Edge, ExternalUntil, PetState, SharedState, StatePayload};
 use crate::window_tracker::SharedWindows;
 use rand::seq::SliceRandom;
 use rand::rngs::SmallRng;
@@ -57,12 +57,17 @@ const FLOOR_GAP_PX: i32 = 10;
 const FALL_SPEED_PX_PER_TICK: i32 = 4;
 const WALL_GRAB_DIST: i32 = 12;
 
-pub fn spawn_auto_cycle(app: AppHandle, state: SharedState) {
+pub fn spawn_auto_cycle(app: AppHandle, state: SharedState, external_until: ExternalUntil) {
     tauri::async_runtime::spawn(async move {
         let mut rng = SmallRng::from_entropy();
         loop {
             let wait = rng.gen_range(25..55);
             sleep(Duration::from_secs(wait)).await;
+
+            // Skip auto-cycle entirely while an external client (HTTP/MCP) is driving the pet.
+            if Instant::now() < *external_until.lock() {
+                continue;
+            }
 
             let current = *state.read();
             if !matches!(current, PetState::IdleLiving) {
@@ -86,6 +91,10 @@ pub fn spawn_auto_cycle(app: AppHandle, state: SharedState) {
             let hold = if matches!(next, PetState::Walking { .. }) { rng.gen_range(6..12) } else { rng.gen_range(8..16) };
             sleep(Duration::from_secs(hold)).await;
 
+            // Don't reset back to idle if an external client took over during the hold.
+            if Instant::now() < *external_until.lock() {
+                continue;
+            }
             let still = *state.read();
             if still == next {
                 set_state(&app, &state, PetState::IdleLiving);

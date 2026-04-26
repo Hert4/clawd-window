@@ -1,0 +1,9 @@
+{
+  "name": "clawd",
+  "description": "Control the Clawd desktop pet from Claude Code (slash commands, hooks reacting to tool use, MCP tools).",
+  "version": "0.1.0",
+  "author": {
+    "name": "Hert4"
+  },
+  "homepage": "https://github.com/Hert4/clawd-window"
+}

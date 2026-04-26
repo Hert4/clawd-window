@@ -1,6 +1,7 @@
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -74,6 +75,45 @@ impl PetState {
             PetState::WorkingBeacon => "working_beacon",
         }
     }
+
+    pub fn from_key(key: &str) -> Option<PetState> {
+        Some(match key {
+            "idle_living" => PetState::IdleLiving,
+            "sleeping" => PetState::Sleeping,
+            "happy" => PetState::Happy,
+            "dizzy" => PetState::Dizzy,
+            "dragging" => PetState::Dragging,
+            "eating" => PetState::Eating,
+            "going_away" => PetState::GoingAway,
+            "disconnected" => PetState::Disconnected,
+            "notification" => PetState::Notification,
+            "working_typing" => PetState::WorkingTyping,
+            "working_thinking" => PetState::WorkingThinking,
+            "working_juggling" => PetState::WorkingJuggling,
+            "working_building" => PetState::WorkingBuilding,
+            "working_carrying" => PetState::WorkingCarrying,
+            "working_conducting" => PetState::WorkingConducting,
+            "working_confused" => PetState::WorkingConfused,
+            "working_debugger" => PetState::WorkingDebugger,
+            "working_overheated" => PetState::WorkingOverheated,
+            "working_pushing" => PetState::WorkingPushing,
+            "working_sweeping" => PetState::WorkingSweeping,
+            "working_wizard" => PetState::WorkingWizard,
+            "working_beacon" => PetState::WorkingBeacon,
+            _ => return None,
+        })
+    }
+
+    pub fn all_keys() -> &'static [&'static str] {
+        &[
+            "idle_living", "sleeping", "happy", "dizzy", "dragging", "eating",
+            "going_away", "disconnected", "notification",
+            "working_typing", "working_thinking", "working_juggling",
+            "working_building", "working_carrying", "working_conducting",
+            "working_confused", "working_debugger", "working_overheated",
+            "working_pushing", "working_sweeping", "working_wizard", "working_beacon",
+        ]
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -117,4 +157,13 @@ pub fn working_states() -> &'static [PetState] {
         PetState::WorkingWizard,
         PetState::WorkingBeacon,
     ]
+}
+
+// Tracks "external control deadline" — when an HTTP/MCP client sets a state,
+// we bump this to now+30s. spawn_auto_cycle skips its self-reset to idle while
+// Instant::now() < *external_until, so user-driven states aren't stomped.
+pub type ExternalUntil = Arc<Mutex<Instant>>;
+
+pub fn new_external_until() -> ExternalUntil {
+    Arc::new(Mutex::new(Instant::now() - Duration::from_secs(60)))
 }

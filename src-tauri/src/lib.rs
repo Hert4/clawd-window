@@ -1,41 +1,19 @@
 // Clawd desktop pet
 mod file_eater;
+mod http_api;
 mod pet_controller;
 mod state;
 mod tray;
 mod window_tracker;
 
-use crate::state::{new_shared_state, PetState, SharedState, StatePayload};
+use crate::state::{new_external_until, new_shared_state, ExternalUntil, PetState, SharedState, StatePayload};
 use crate::window_tracker::{new_shared_windows, SharedWindows};
 use tauri::{AppHandle, Emitter, Manager};
 
 #[tauri::command]
 fn set_state_cmd(state_key: String, app: AppHandle, state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    let next = match state_key.as_str() {
-        "idle_living" => PetState::IdleLiving,
-        "sleeping" => PetState::Sleeping,
-        "happy" => PetState::Happy,
-        "dizzy" => PetState::Dizzy,
-        "dragging" => PetState::Dragging,
-        "eating" => PetState::Eating,
-        "going_away" => PetState::GoingAway,
-        "disconnected" => PetState::Disconnected,
-        "notification" => PetState::Notification,
-        "working_typing" => PetState::WorkingTyping,
-        "working_thinking" => PetState::WorkingThinking,
-        "working_juggling" => PetState::WorkingJuggling,
-        "working_building" => PetState::WorkingBuilding,
-        "working_carrying" => PetState::WorkingCarrying,
-        "working_conducting" => PetState::WorkingConducting,
-        "working_confused" => PetState::WorkingConfused,
-        "working_debugger" => PetState::WorkingDebugger,
-        "working_overheated" => PetState::WorkingOverheated,
-        "working_pushing" => PetState::WorkingPushing,
-        "working_sweeping" => PetState::WorkingSweeping,
-        "working_wizard" => PetState::WorkingWizard,
-        "working_beacon" => PetState::WorkingBeacon,
-        _ => return Err(format!("unknown state: {}", state_key)),
-    };
+    let next = PetState::from_key(&state_key)
+        .ok_or_else(|| format!("unknown state: {}", state_key))?;
     *state.write() = next;
     let payload: StatePayload = next.into();
     app.emit("state-changed", payload).map_err(|e| e.to_string())?;
@@ -52,6 +30,7 @@ fn get_state_cmd(state: tauri::State<'_, SharedState>) -> StatePayload {
 pub fn run() {
     let shared = new_shared_state();
     let windows = new_shared_windows();
+    let external_until = new_external_until();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -62,6 +41,7 @@ pub fn run() {
         }))
         .manage(shared)
         .manage(windows)
+        .manage(external_until)
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -83,6 +63,7 @@ pub fn run() {
 
             let shared = app.state::<SharedState>().inner().clone();
             let windows = app.state::<SharedWindows>().inner().clone();
+            let external_until = app.state::<ExternalUntil>().inner().clone();
 
             #[cfg(windows)]
             let self_hwnd: isize = app
@@ -93,8 +74,9 @@ pub fn run() {
             let self_hwnd: isize = 0;
 
             window_tracker::spawn_window_poller(windows.clone(), self_hwnd);
-            pet_controller::spawn_auto_cycle(app.handle().clone(), shared.clone());
-            pet_controller::spawn_walker(app.handle().clone(), shared, windows);
+            pet_controller::spawn_auto_cycle(app.handle().clone(), shared.clone(), external_until.clone());
+            pet_controller::spawn_walker(app.handle().clone(), shared.clone(), windows);
+            http_api::spawn_http_server(app.handle().clone(), shared, external_until);
 
             Ok(())
         })

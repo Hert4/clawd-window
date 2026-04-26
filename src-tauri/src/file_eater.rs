@@ -1,8 +1,22 @@
 use crate::state::{PetState, SharedState};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::sleep;
+
+// Reject paths outside the user's home directory. Eating C:\Windows\... or arbitrary
+// system files would be a footgun even via Recycle Bin (Windows blocks some, others
+// disrupt the OS). Canonicalize to resolve .. and symlinks before checking.
+pub fn validate_eat_path(p: &Path) -> Result<PathBuf, String> {
+    let canon = std::fs::canonicalize(p)
+        .map_err(|e| format!("canonicalize {:?}: {}", p, e))?;
+    let home = dirs::home_dir().ok_or_else(|| "no home dir".to_string())?;
+    let home_canon = std::fs::canonicalize(&home).unwrap_or(home);
+    if !canon.starts_with(&home_canon) {
+        return Err(format!("path outside home: {:?}", canon));
+    }
+    Ok(canon)
+}
 
 pub async fn eat_paths(
     app: AppHandle,
@@ -15,11 +29,19 @@ pub async fn eat_paths(
     let mut ok = 0usize;
     let mut had_error = false;
     for p in &paths {
-        match trash::delete(p) {
+        let validated = match validate_eat_path(p) {
+            Ok(v) => v,
+            Err(e) => {
+                had_error = true;
+                log::warn!("eat rejected: {}", e);
+                continue;
+            }
+        };
+        match trash::delete(&validated) {
             Ok(()) => ok += 1,
             Err(e) => {
                 had_error = true;
-                log::warn!("trash::delete failed for {:?}: {}", p, e);
+                log::warn!("trash::delete failed for {:?}: {}", validated, e);
             }
         }
     }
