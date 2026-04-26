@@ -1,0 +1,45 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+#clawd {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -webkit-user-drag: none;
+}
+
+#clawd.flip {
+  transform: scaleX(-1);
+}
+
+#clawd.climb-left {
+  transform: rotate(-90deg);
+}
+
+#clawd.climb-right {
+  transform: rotate(90deg);
+}
+
+#clawd.climb-top {
+  transform: rotate(180deg);
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: transparent;
+}

@@ -1,0 +1,24 @@
+# Rust / Cargo
+/src-tauri/target/
+**/*.rs.bk
+*.pdb
+
+# Tauri
+/src-tauri/gen/schemas/
+
+# Build artifacts
+build.log
+*.log
+**/icon-source.png
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+.serena/
