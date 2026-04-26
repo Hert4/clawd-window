@@ -2,14 +2,9 @@
 description: Clawd celebrates — happy animation 1.5s then back to idle
 ---
 
-Trigger Clawd's celebrate sequence (happy 1.5s → idle).
+Call the `clawd_celebrate` MCP tool (from the `clawd` server). No arguments.
 
-Run this Bash command:
+If the tool succeeds, reply `Clawd ăn mừng 🎉`.
+If it returns "clawd app not running", tell the user to start the Clawd desktop app from the system tray.
 
-```bash
-curl -s -X POST "http://127.0.0.1:${CLAWD_PORT:-9876}/celebrate"
-```
-
-If `{"ok":true}` → tell the user "Clawd ăn mừng 🎉". If error → report it.
-
-If connection refused → Clawd app isn't running, ask user to start it.
+Do NOT run any Bash/curl commands — use the MCP tool only.

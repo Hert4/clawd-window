@@ -2,14 +2,14 @@
 description: Show Clawd's current state
 ---
 
-Query Clawd's current state from the local HTTP API.
+Call the `clawd_status` MCP tool (from the `clawd` server). No arguments.
 
-Run this Bash command:
+The tool returns text like `Clawd: {"state":"idle_living","direction":null,"edge":null}`. Parse it and report the state concisely to the user, e.g.:
 
-```bash
-curl -s "http://127.0.0.1:${CLAWD_PORT:-9876}/status"
-```
+- `Clawd đang idle_living`
+- `Clawd đang walking (direction: left)` — when direction is set
+- `Clawd đang climbing (edge: right)` — when edge is set
 
-Parse the JSON response (fields: `state`, optional `direction`, optional `edge`) and report it concisely to the user. Example: "Clawd đang `walking` (direction: left)" or "Clawd đang `idle_living`".
+If the tool returns "clawd app not running", tell the user `Clawd app chưa chạy`.
 
-If connection refused → tell the user "Clawd app chưa chạy" (app not running).
+Do NOT run any Bash/curl commands — use the MCP tool only.

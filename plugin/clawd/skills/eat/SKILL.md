@@ -2,17 +2,12 @@
 description: Feed a file/folder to Clawd (moves it to Recycle Bin)
 ---
 
-Have Clawd eat the path provided in `$ARGUMENTS`. The file/folder is moved to the Recycle Bin (recoverable, NOT permanently deleted). Only paths under the user's home directory are accepted — system paths like `C:\Windows\` are rejected.
+Call the `clawd_eat` MCP tool (from the `clawd` server) with `paths: [<the path from $ARGUMENTS>]`.
 
-Run this Bash command (escape backslashes in the path properly for JSON):
+The path comes from `$ARGUMENTS`. Pass it as a single-element array. The tool returns text like `Clawd ate N item(s).`
 
-```bash
-PATH_ARG=$(printf '%s' "$ARGUMENTS" | sed 's/\\/\\\\/g; s/"/\\"/g')
-curl -s -X POST "http://127.0.0.1:${CLAWD_PORT:-9876}/eat" \
-  -H "Content-Type: application/json" \
-  -d "{\"paths\":[\"$PATH_ARG\"]}"
-```
+- If `N >= 1`: confirm to the user, e.g. `Clawd đã ăn $ARGUMENTS — đã vào Recycle Bin.`
+- If `N == 0`: the path was rejected (likely outside `%USERPROFILE%` or doesn't exist). Tell the user.
+- If "clawd app not running": tell the user to start the Clawd desktop app.
 
-Response is `{"eaten": N}` where N is the number actually moved. If 0, the path was rejected (likely outside home dir or doesn't exist) — check the Clawd app log for the warn line.
-
-If connection refused → Clawd app isn't running.
+Do NOT run any Bash/curl commands — use the MCP tool only.

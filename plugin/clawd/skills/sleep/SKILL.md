@@ -2,16 +2,9 @@
 description: Force Clawd to sleep
 ---
 
-Force the Clawd desktop pet into sleep state.
+Call the `clawd_set_state` MCP tool (from the `clawd` server) with `state: "sleeping"`.
 
-Run this Bash command:
+If the tool returns success, reply `Clawd đi ngủ 💤`.
+If it returns "clawd app not running", tell the user to start the Clawd desktop app from the system tray.
 
-```bash
-curl -s -X POST "http://127.0.0.1:${CLAWD_PORT:-9876}/state" \
-  -H "Content-Type: application/json" \
-  -d '{"state":"sleeping"}'
-```
-
-If `{"ok":true}` → tell the user "Clawd đi ngủ 💤". If error → report it.
-
-If connection refused → Clawd app isn't running, ask user to start it from the system tray.
+Do NOT run any Bash/curl commands — use the MCP tool only.

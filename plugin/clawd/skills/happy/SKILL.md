@@ -2,16 +2,9 @@
 description: Make Clawd play the happy animation
 ---
 
-Make the Clawd desktop pet play the happy animation by calling its local HTTP API.
+Call the `clawd_set_state` MCP tool (from the `clawd` server bundled with this plugin) with `state: "happy"`.
 
-Run this Bash command (don't add commentary, just execute and report the result):
+If the tool returns `"Clawd state set to happy."`, reply with `Clawd vui rồi 🦀`.
+If it returns an error like "clawd app not running", tell the user to start the Clawd desktop app from the system tray.
 
-```bash
-curl -s -X POST "http://127.0.0.1:${CLAWD_PORT:-9876}/state" \
-  -H "Content-Type: application/json" \
-  -d '{"state":"happy"}'
-```
-
-If the response is `{"ok":true}`, tell the user "Clawd vui rồi 🦀" (in Vietnamese, since this is Hert4's tone). If the response includes `"error"`, tell the user the error.
-
-If curl fails with connection refused, the Clawd app isn't running — tell the user to start it from the system tray.
+Do NOT run any Bash/curl commands — use the MCP tool only.
