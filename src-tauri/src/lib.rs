@@ -1,11 +1,15 @@
 // Clawd desktop pet
 mod file_eater;
 mod http_api;
+mod mood;
 mod pet_controller;
+mod pet_pack;
 mod state;
 mod tray;
 mod window_tracker;
 
+use crate::mood::{new_shared_mood, SharedMood};
+use crate::pet_pack::{new_shared_pack, SharedPack};
 use crate::state::{new_external_until, new_shared_state, ExternalUntil, PetState, SharedState, StatePayload};
 use crate::window_tracker::{new_shared_windows, SharedWindows};
 use tauri::{AppHandle, Emitter, Manager};
@@ -31,6 +35,8 @@ pub fn run() {
     let shared = new_shared_state();
     let windows = new_shared_windows();
     let external_until = new_external_until();
+    let pack = new_shared_pack();
+    let mood = new_shared_mood();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -42,6 +48,8 @@ pub fn run() {
         .manage(shared)
         .manage(windows)
         .manage(external_until)
+        .manage(pack)
+        .manage(mood)
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -64,6 +72,8 @@ pub fn run() {
             let shared = app.state::<SharedState>().inner().clone();
             let windows = app.state::<SharedWindows>().inner().clone();
             let external_until = app.state::<ExternalUntil>().inner().clone();
+            let pack = app.state::<SharedPack>().inner().clone();
+            let mood = app.state::<SharedMood>().inner().clone();
 
             #[cfg(windows)]
             let self_hwnd: isize = app
@@ -74,8 +84,9 @@ pub fn run() {
             let self_hwnd: isize = 0;
 
             window_tracker::spawn_window_poller(windows.clone(), self_hwnd);
-            pet_controller::spawn_auto_cycle(app.handle().clone(), shared.clone(), external_until.clone());
-            pet_controller::spawn_walker(app.handle().clone(), shared.clone(), windows);
+            mood::spawn_mood_thread(mood.clone());
+            pet_controller::spawn_auto_cycle(app.handle().clone(), shared.clone(), external_until.clone(), pack.clone(), mood);
+            pet_controller::spawn_walker(app.handle().clone(), shared.clone(), windows, pack);
             http_api::spawn_http_server(app.handle().clone(), shared, external_until);
 
             Ok(())
@@ -84,6 +95,9 @@ pub fn run() {
             set_state_cmd,
             get_state_cmd,
             file_eater::eat_files,
+            pet_pack::list_packs_cmd,
+            pet_pack::get_pack_cmd,
+            pet_pack::set_pack_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

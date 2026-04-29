@@ -1,3 +1,7 @@
+:root {
+  --pet-scale: 1;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -10,31 +14,36 @@ html, body {
   cursor: default;
 }
 
-#clawd {
+#clawd, #clawd-img, #clawd-vid {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
+  -webkit-user-drag: none;
+  object-fit: contain;
+  transform: scale(var(--pet-scale));
+}
+
+#clawd {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  -webkit-user-drag: none;
 }
 
-#clawd.flip {
-  transform: scaleX(-1);
+#clawd.flip, #clawd-img.flip, #clawd-vid.flip {
+  transform: scale(var(--pet-scale)) scaleX(-1);
 }
 
-#clawd.climb-left {
-  transform: rotate(-90deg);
+#clawd.climb-left, #clawd-img.climb-left, #clawd-vid.climb-left {
+  transform: scale(var(--pet-scale)) rotate(-90deg);
 }
 
-#clawd.climb-right {
-  transform: rotate(90deg);
+#clawd.climb-right, #clawd-img.climb-right, #clawd-vid.climb-right {
+  transform: scale(var(--pet-scale)) rotate(90deg);
 }
 
-#clawd.climb-top {
-  transform: rotate(180deg);
+#clawd.climb-top, #clawd-img.climb-top, #clawd-vid.climb-top {
+  transform: scale(var(--pet-scale)) rotate(180deg);
 }
 
 #overlay {

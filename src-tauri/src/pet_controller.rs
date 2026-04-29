@@ -1,3 +1,5 @@
+use crate::mood::{Mood, SharedMood};
+use crate::pet_pack::{PackBehavior, SharedPack};
 use crate::state::{working_states, Direction, Edge, ExternalUntil, PetState, SharedState, StatePayload};
 use crate::window_tracker::SharedWindows;
 use rand::seq::SliceRandom;
@@ -57,14 +59,50 @@ const FLOOR_GAP_PX: i32 = 10;
 const FALL_SPEED_PX_PER_TICK: i32 = 4;
 const WALL_GRAB_DIST: i32 = 12;
 
-pub fn spawn_auto_cycle(app: AppHandle, state: SharedState, external_until: ExternalUntil) {
+pub fn spawn_auto_cycle(app: AppHandle, state: SharedState, external_until: ExternalUntil, pack: SharedPack, mood: SharedMood) {
     tauri::async_runtime::spawn(async move {
         let mut rng = SmallRng::from_entropy();
         loop {
-            let wait = rng.gen_range(25..55);
+            let cur_mood = *mood.read();
+
+            // Sleepy mood: pet stays asleep until user activity wakes mood thread up.
+            // Don't auto-cycle anything; just keep checking back.
+            if cur_mood == Mood::Sleepy {
+                // Force Sleeping state if we're idle-living, otherwise leave alone.
+                if Instant::now() >= *external_until.lock() {
+                    let cur = *state.read();
+                    if matches!(cur, PetState::IdleLiving) {
+                        set_state(&app, &state, PetState::Sleeping);
+                    }
+                }
+                sleep(Duration::from_secs(20)).await;
+                continue;
+            }
+
+            // Wake from Sleeping if we're not sleepy anymore.
+            {
+                let cur = *state.read();
+                if matches!(cur, PetState::Sleeping) && Instant::now() >= *external_until.lock() {
+                    set_state(&app, &state, PetState::IdleLiving);
+                }
+            }
+
+            // Resting mood cycles faster (more reaction variety, no walking).
+            // Active mood paces normally with walking mixed in.
+            let wait = match cur_mood {
+                Mood::Active => rng.gen_range(20..45),
+                Mood::Resting => rng.gen_range(12..28),
+                Mood::Sleepy => 30, // unreachable here
+            };
             sleep(Duration::from_secs(wait)).await;
 
-            // Skip auto-cycle entirely while an external client (HTTP/MCP) is driving the pet.
+            // Idle-behavior packs handle sticker rotation client-side from the manifest's
+            // `pool` field — backend doesn't drive state changes for them.
+            if pack.read().behavior == PackBehavior::Idle {
+                continue;
+            }
+
+            // Skip auto-cycle while an external client (HTTP/MCP) drives the pet.
             if Instant::now() < *external_until.lock() {
                 continue;
             }
@@ -74,24 +112,42 @@ pub fn spawn_auto_cycle(app: AppHandle, state: SharedState, external_until: Exte
                 continue;
             }
 
-            let pick: u32 = rng.gen_range(0..10);
-            let next: PetState = if pick < 4 {
-                let dir = if rng.gen_bool(0.5) { Direction::Left } else { Direction::Right };
-                PetState::Walking { dir }
-            } else {
-                let pool = working_states();
-                match pool.choose(&mut rng) {
-                    Some(s) => *s,
-                    None => continue,
+            // Re-read mood (might have changed during the wait).
+            let cur_mood = *mood.read();
+
+            let next: PetState = match cur_mood {
+                Mood::Active => {
+                    // 60% walking, 40% working — pet roams more.
+                    let pick: u32 = rng.gen_range(0..10);
+                    if pick < 6 {
+                        let dir = if rng.gen_bool(0.5) { Direction::Left } else { Direction::Right };
+                        PetState::Walking { dir }
+                    } else {
+                        match working_states().choose(&mut rng) {
+                            Some(s) => *s,
+                            None => continue,
+                        }
+                    }
                 }
+                Mood::Resting => {
+                    // Pet stays put — only working states (reactions).
+                    match working_states().choose(&mut rng) {
+                        Some(s) => *s,
+                        None => continue,
+                    }
+                }
+                Mood::Sleepy => continue, // handled above
             };
 
             set_state(&app, &state, next);
 
-            let hold = if matches!(next, PetState::Walking { .. }) { rng.gen_range(6..12) } else { rng.gen_range(8..16) };
+            let hold = if matches!(next, PetState::Walking { .. }) {
+                rng.gen_range(6..12)
+            } else {
+                rng.gen_range(6..14)
+            };
             sleep(Duration::from_secs(hold)).await;
 
-            // Don't reset back to idle if an external client took over during the hold.
             if Instant::now() < *external_until.lock() {
                 continue;
             }
@@ -103,7 +159,7 @@ pub fn spawn_auto_cycle(app: AppHandle, state: SharedState, external_until: Exte
     });
 }
 
-pub fn spawn_walker(app: AppHandle, state: SharedState, windows: SharedWindows) {
+pub fn spawn_walker(app: AppHandle, state: SharedState, windows: SharedWindows, pack: SharedPack) {
     tauri::async_runtime::spawn(async move {
         let mut ticker = interval(Duration::from_millis(WALK_TICK_MS));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -120,6 +176,13 @@ pub fn spawn_walker(app: AppHandle, state: SharedState, windows: SharedWindows) 
 
         loop {
             ticker.tick().await;
+
+            // Idle packs don't move autonomously — drop all gravity / walking / climbing.
+            // User can still drag the pet manually (Tauri's startDragging handles that).
+            if pack.read().behavior == PackBehavior::Idle {
+                initialized = false;
+                continue;
+            }
 
             let cur = *state.read();
             if matches!(cur, PetState::Eating) {
@@ -177,6 +240,11 @@ pub fn spawn_walker(app: AppHandle, state: SharedState, windows: SharedWindows) 
                 pet_y = actual.y;
                 last_external_change = Instant::now();
                 corner_turn_remaining = 0;
+                // User dragged the pet — drop any walking/climbing commitment so it
+                // doesn't snap back to a wall (or wall it was climbing) on release.
+                if matches!(cur, PetState::Walking { .. } | PetState::Climbing { .. }) {
+                    emit_state(&app, &state, PetState::IdleLiving);
+                }
             }
 
             if last_external_change.elapsed() < Duration::from_millis(180) {

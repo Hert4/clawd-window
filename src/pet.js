@@ -1,32 +1,5 @@
 "use strict";
 
-const STATE_TO_SVG = {
-  idle_living: "assets/clawd-idle-living.svg",
-  walking: "assets/clawd-crab-walking.svg",
-  climbing: "assets/clawd-crab-walking.svg",
-  sleeping: "assets/clawd-sleeping.svg",
-  happy: "assets/clawd-happy.svg",
-  dizzy: "assets/clawd-dizzy.svg",
-  dragging: "assets/clawd-dizzy.svg",
-  eating: "assets/clawd-working-carrying.svg",
-  going_away: "assets/clawd-going-away.svg",
-  disconnected: "assets/clawd-disconnected.svg",
-  notification: "assets/clawd-notification.svg",
-  working_typing: "assets/clawd-working-typing.svg",
-  working_thinking: "assets/clawd-working-thinking.svg",
-  working_juggling: "assets/clawd-working-juggling.svg",
-  working_building: "assets/clawd-working-building.svg",
-  working_carrying: "assets/clawd-working-carrying.svg",
-  working_conducting: "assets/clawd-working-conducting.svg",
-  working_confused: "assets/clawd-working-confused.svg",
-  working_debugger: "assets/clawd-working-debugger.svg",
-  working_overheated: "assets/clawd-working-overheated.svg",
-  working_pushing: "assets/clawd-working-pushing.svg",
-  working_sweeping: "assets/clawd-working-sweeping.svg",
-  working_wizard: "assets/clawd-working-wizard.svg",
-  working_beacon: "assets/clawd-working-beacon.svg",
-};
-
 const EYE_SELECTORS = [".eyes-look", ".eyes-anim", ".eyes-blink"];
 const PIXEL_CSS = `svg { image-rendering: pixelated; shape-rendering: crispEdges; }`;
 
@@ -36,7 +9,9 @@ const DRAG_TIMEOUT_MS = 250;
 const EYE_TRACK_RADIUS = 280;
 const EYE_TRACK_MAX = 6;
 
-const obj = document.getElementById("clawd");
+const objSvg = document.getElementById("clawd");
+const objImg = document.getElementById("clawd-img");
+const objVid = document.getElementById("clawd-vid");
 const overlay = document.getElementById("overlay");
 
 let currentState = "idle_living";
@@ -44,6 +19,17 @@ let currentDirection = null;
 let currentEdge = null;
 let currentEyesEl = null;
 let preHappyState = null;
+let currentManifest = null;
+
+// Cycler state: shuffled-no-repeat rotation through manifest.pool for idle packs.
+// Only swaps the displayed asset while pet is in idle_living — state changes
+// (click → happy, drop → eating, ...) interrupt and override.
+const CYCLER_INTERVAL_MS = 5000;
+let cyclerActive = false;
+let cyclerPool = [];
+let cyclerOrder = [];
+let cyclerCursor = 0;
+let cyclerTimer = null;
 
 const tauri = window.__TAURI__ || null;
 console.log("[Clawd] __TAURI__ keys:", tauri ? Object.keys(tauri) : "null");
@@ -82,8 +68,10 @@ async function setIgnoreCursorEventsSafe(ignore) {
 }
 
 function applyDirectionEdge(direction, edge) {
-  obj.classList.remove("flip", "climb-left", "climb-right", "climb-top");
-  if (direction === "left") obj.classList.add("flip");
+  for (const el of [objSvg, objImg, objVid]) {
+    el.classList.remove("flip", "climb-left", "climb-right", "climb-top");
+    if (direction === "left") el.classList.add("flip");
+  }
 }
 
 function injectPixelCss(doc) {
@@ -107,29 +95,152 @@ function findEyesEl(doc) {
   return null;
 }
 
-obj.addEventListener("load", () => {
-  const doc = obj.contentDocument;
+objSvg.addEventListener("load", () => {
+  const doc = objSvg.contentDocument;
   try { injectPixelCss(doc); } catch (e) { console.warn("[Clawd] injectPixelCss:", e); }
   try { currentEyesEl = findEyesEl(doc); } catch (e) { console.warn("[Clawd] findEyesEl:", e); currentEyesEl = null; }
   console.log("[Clawd] svg loaded, eyes el:", currentEyesEl ? currentEyesEl.tagName + "." + currentEyesEl.getAttribute("class") : "NOT FOUND");
 });
 
+function resolveAssetPath(state) {
+  if (!currentManifest || !currentManifest.states) return null;
+  return currentManifest.states[state] || currentManifest.states.idle_living || null;
+}
+
+function showAssetByPath(path) {
+  if (!path) return;
+  const ext = path.split(".").pop().toLowerCase();
+  if (ext === "svg") showSvg(path);
+  else if (ext === "webm") showVid(path);
+  else showImg(path);
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function pickNextCyclerSticker() {
+  if (cyclerPool.length === 0) return null;
+  if (cyclerCursor >= cyclerOrder.length) {
+    cyclerOrder = Array.from({ length: cyclerPool.length }, (_, i) => i);
+    shuffleArray(cyclerOrder);
+    cyclerCursor = 0;
+  }
+  return cyclerPool[cyclerOrder[cyclerCursor++]];
+}
+
+function tickCycler() {
+  if (!cyclerActive) return;
+  // Only swap when pet is in idle_living — non-idle states control the asset themselves.
+  if (currentState !== "idle_living") return;
+  const path = pickNextCyclerSticker();
+  if (path) showAssetByPath(path);
+}
+
+function startCycler(pool) {
+  stopCycler();
+  if (!Array.isArray(pool) || pool.length === 0) return;
+  cyclerPool = pool.slice();
+  cyclerOrder = Array.from({ length: cyclerPool.length }, (_, i) => i);
+  shuffleArray(cyclerOrder);
+  cyclerCursor = 0;
+  cyclerActive = true;
+  console.log("[Clawd] cycler started, pool size:", cyclerPool.length);
+  tickCycler();
+  cyclerTimer = setInterval(tickCycler, CYCLER_INTERVAL_MS);
+}
+
+function stopCycler() {
+  if (cyclerTimer) clearInterval(cyclerTimer);
+  cyclerTimer = null;
+  cyclerActive = false;
+  cyclerPool = [];
+  cyclerOrder = [];
+  cyclerCursor = 0;
+}
+
+function showSvg(path) {
+  const cur = objSvg.getAttribute("data") || "";
+  if (cur !== path) objSvg.data = path;
+  objSvg.hidden = false;
+  objImg.hidden = true;
+  if (!objVid.paused) objVid.pause();
+  objVid.hidden = true;
+}
+
+function showImg(path) {
+  if (objImg.getAttribute("src") !== path) objImg.src = path;
+  objImg.hidden = false;
+  objSvg.hidden = true;
+  if (!objVid.paused) objVid.pause();
+  objVid.hidden = true;
+  currentEyesEl = null;
+}
+
+function showVid(path) {
+  if (objVid.getAttribute("src") !== path) objVid.src = path;
+  objVid.hidden = false;
+  objSvg.hidden = true;
+  objImg.hidden = true;
+  objVid.play().catch(() => {});
+  currentEyesEl = null;
+}
+
 function applyState(payload) {
   const state = payload.state || payload;
   const direction = payload.direction || null;
   const edge = payload.edge || null;
-  const path = STATE_TO_SVG[state];
-  if (!path) {
-    console.warn("Unknown state:", state);
-    return;
-  }
   currentState = state;
   currentDirection = direction;
   currentEdge = edge;
   applyDirectionEdge(direction, edge);
-  const currentPath = obj.getAttribute("data") || "";
-  if (currentPath !== path) {
-    obj.data = path;
+
+  // Cycler controls the asset while in idle_living. Snap to a fresh sticker
+  // immediately on entering idle (so we don't get stuck on the previous state's asset).
+  if (cyclerActive && state === "idle_living") {
+    const path = pickNextCyclerSticker();
+    if (path) showAssetByPath(path);
+    return;
+  }
+
+  const path = resolveAssetPath(state);
+  if (!path) {
+    console.warn("[Clawd] no asset for state:", state, "manifest:", currentManifest && currentManifest.id);
+    return;
+  }
+  showAssetByPath(path);
+}
+
+async function loadPack(packId) {
+  try {
+    const idxRes = await fetch("packs/index.json");
+    const idx = await idxRes.json();
+    const entry = (idx.packs || []).find((p) => p.id === packId);
+    if (!entry) {
+      console.warn("[Clawd] pack not in index.json:", packId);
+      return;
+    }
+    const manRes = await fetch(entry.manifest);
+    currentManifest = await manRes.json();
+    console.log("[Clawd] loaded pack:", currentManifest.id, "behavior:", currentManifest.behavior, "states:", Object.keys(currentManifest.states || {}).length, "pool:", (currentManifest.pool || []).length);
+
+    const scale = typeof currentManifest.scale === "number" ? currentManifest.scale : 1;
+    document.documentElement.style.setProperty("--pet-scale", scale);
+
+    // Cycler runs whenever pack provides a pool — independent of walker/idle behavior.
+    // It rotates stickers during idle_living; non-idle states (walking, eating, ...) take over the asset.
+    if (Array.isArray(currentManifest.pool) && currentManifest.pool.length > 0) {
+      startCycler(currentManifest.pool);
+    } else {
+      stopCycler();
+    }
+
+    applyState({ state: currentState, direction: currentDirection, edge: currentEdge });
+  } catch (err) {
+    console.error("[Clawd] loadPack failed:", err);
   }
 }
 
@@ -238,6 +349,10 @@ async function init() {
   await listen("state-changed", (event) => {
     applyState(event.payload);
   });
+  await listen("pack-changed", (event) => {
+    const packId = event.payload && event.payload.id;
+    if (packId) loadPack(packId);
+  });
   await listen("cursor-pos", (event) => {
   });
   await listen("tauri://drag-enter", () => {
@@ -255,6 +370,12 @@ async function init() {
       console.error("eat_files:", err);
     }
   });
+  try {
+    const pack = await invoke("get_pack_cmd");
+    if (pack && pack.id) await loadPack(pack.id);
+  } catch (err) {
+    console.warn("get_pack_cmd failed:", err);
+  }
   try {
     const cur = await invoke("get_state_cmd");
     if (cur) applyState(cur);

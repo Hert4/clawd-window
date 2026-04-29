@@ -1,0 +1,31 @@
+{
+  "id": "clawd",
+  "name": "Clawd",
+  "behavior": "walker",
+  "states": {
+    "idle_living":         "assets/clawd-idle-living.svg",
+    "walking":             "assets/clawd-crab-walking.svg",
+    "climbing":            "assets/clawd-crab-walking.svg",
+    "sleeping":            "assets/clawd-sleeping.svg",
+    "happy":               "assets/clawd-happy.svg",
+    "dizzy":               "assets/clawd-dizzy.svg",
+    "dragging":            "assets/clawd-dizzy.svg",
+    "eating":              "assets/clawd-working-carrying.svg",
+    "going_away":          "assets/clawd-going-away.svg",
+    "disconnected":        "assets/clawd-disconnected.svg",
+    "notification":        "assets/clawd-notification.svg",
+    "working_typing":      "assets/clawd-working-typing.svg",
+    "working_thinking":    "assets/clawd-working-thinking.svg",
+    "working_juggling":    "assets/clawd-working-juggling.svg",
+    "working_building":    "assets/clawd-working-building.svg",
+    "working_carrying":    "assets/clawd-working-carrying.svg",
+    "working_conducting":  "assets/clawd-working-conducting.svg",
+    "working_confused":    "assets/clawd-working-confused.svg",
+    "working_debugger":    "assets/clawd-working-debugger.svg",
+    "working_overheated":  "assets/clawd-working-overheated.svg",
+    "working_pushing":     "assets/clawd-working-pushing.svg",
+    "working_sweeping":    "assets/clawd-working-sweeping.svg",
+    "working_wizard":      "assets/clawd-working-wizard.svg",
+    "working_beacon":      "assets/clawd-working-beacon.svg"
+  }
+}

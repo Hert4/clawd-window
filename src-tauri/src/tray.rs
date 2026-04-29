@@ -1,6 +1,7 @@
+use crate::pet_pack::{list_packs_cmd, set_pack_from_id};
 use crate::state::{PetState, SharedState};
 use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
@@ -12,11 +13,25 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let wake = MenuItemBuilder::with_id("wake", "Wake Up").build(app)?;
     let reset = MenuItemBuilder::with_id("reset", "Reset Position").build(app)?;
     let exit = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
+    let sep0 = PredefinedMenuItem::separator(app)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
 
+    let pack_items: Vec<_> = list_packs_cmd()
+        .into_iter()
+        .map(|p| {
+            MenuItemBuilder::with_id(format!("pack:{}", p.id), p.name)
+                .build(app)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+    let mut pet_submenu = SubmenuBuilder::new(app, "Pet");
+    for item in &pack_items {
+        pet_submenu = pet_submenu.item(item);
+    }
+    let pet_submenu = pet_submenu.build()?;
+
     let menu = MenuBuilder::new(app)
-        .items(&[&show, &hide, &sep1, &sleep_item, &wake, &reset, &sep2, &exit])
+        .items(&[&pet_submenu, &sep0, &show, &hide, &sep1, &sleep_item, &wake, &reset, &sep2, &exit])
         .build()?;
 
     let _tray = TrayIconBuilder::with_id("clawd-tray")
@@ -26,6 +41,12 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
+            if let Some(pack_id) = id.strip_prefix("pack:") {
+                if let Err(e) = set_pack_from_id(app, pack_id) {
+                    log::warn!("set_pack_from_id failed: {}", e);
+                }
+                return;
+            }
             match id {
                 "show" => {
                     if let Some(w) = app.get_webview_window("main") {

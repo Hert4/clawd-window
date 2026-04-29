@@ -1,0 +1,7 @@
+{
+  "packs": [
+    { "id": "clawd",       "name": "Clawd",             "manifest": "packs/clawd/manifest.json" },
+    { "id": "hsr_aglaea",  "name": "Aglaea (HSR)",      "manifest": "packs/hsr_bottled_stardust/aglaea/manifest.json" },
+    { "id": "hsr_main",    "name": "Trailblazer (HSR)", "manifest": "packs/hsr_bottled_stardust/main/manifest.json" }
+  ]
+}
